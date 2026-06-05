@@ -172,8 +172,8 @@ def require_login():
             return
     # Всё остальное (админка, добавление/удаление) только после логина
     if not session.get('logged_in'):
-        if request.is_json:
-            return jsonify({'error': 'Unauthorized'}), 401
+        if request.path.startswith('/api/') or request.is_json:
+            return jsonify({'error': 'Unauthorized', 'success': False}), 401
         return redirect('/login')
 
 @app.route('/login')

@@ -27,6 +27,6 @@ Desktop.ini
 # Runtime data (лучше не тащить в репо)
 logs.json
 
-# Загрузки пользователей (опционально — раскомментируй, если не нужны в git)
-# static/uploads/*
-# !static/uploads/.gitkeep
+# Загрузки пользователей
+static/uploads/*
+!static/uploads/.gitkeep

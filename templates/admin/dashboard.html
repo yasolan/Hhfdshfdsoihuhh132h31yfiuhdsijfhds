@@ -207,36 +207,26 @@
             <button type="button" class="modal-close" onclick="closeTableBuilder()">&times;</button>
         </div>
         <div class="table-builder-body">
-            <p class="table-builder-hint">Выберите размер, заполните ячейки и вставьте таблицу в статью.</p>
+            <p class="table-builder-hint">Задайте размер, отредактируйте заголовки столбцов и названия строк, затем вставьте таблицу.</p>
             <div class="table-builder-controls">
-                <div class="table-builder-select">
+                <div class="table-builder-dimension">
                     <label class="admin-label">Столбцов</label>
-                    <select id="tableCols" onchange="renderTableBuilderGrid()">
-                        <option value="2">2</option>
-                        <option value="3" selected>3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                        <option value="6">6</option>
-                        <option value="7">7</option>
-                        <option value="8">8</option>
-                    </select>
+                    <div class="table-builder-stepper">
+                        <button type="button" class="btn btn-secondary btn-small" onclick="changeTableBuilderCols(-1)" aria-label="Убрать столбец">−</button>
+                        <span id="tableColsValue" class="table-builder-count">3</span>
+                        <button type="button" class="btn btn-secondary btn-small" onclick="changeTableBuilderCols(1)" aria-label="Добавить столбец">+</button>
+                    </div>
                 </div>
-                <div class="table-builder-select">
-                    <label class="admin-label">Строк</label>
-                    <select id="tableRows" onchange="renderTableBuilderGrid()">
-                        <option value="2">2</option>
-                        <option value="3" selected>3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                        <option value="6">6</option>
-                        <option value="7">7</option>
-                        <option value="8">8</option>
-                        <option value="9">9</option>
-                        <option value="10">10</option>
-                    </select>
+                <div class="table-builder-dimension">
+                    <label class="admin-label">Строк данных</label>
+                    <div class="table-builder-stepper">
+                        <button type="button" class="btn btn-secondary btn-small" onclick="changeTableBuilderRows(-1)" aria-label="Убрать строку">−</button>
+                        <span id="tableRowsValue" class="table-builder-count">2</span>
+                        <button type="button" class="btn btn-secondary btn-small" onclick="changeTableBuilderRows(1)" aria-label="Добавить строку">+</button>
+                    </div>
                 </div>
             </div>
-            <p class="table-builder-note">Первая строка — заголовки столбцов, остальные — данные.</p>
+            <p class="table-builder-note">Верхняя строка — заголовки столбцов. Левый столбец — названия строк (попадут в таблицу как первая колонка).</p>
             <div id="tableBuilderGrid" class="table-builder-grid-wrap"></div>
             <div class="table-builder-actions">
                 <button type="button" class="btn btn-secondary" onclick="closeTableBuilder()">Отмена</button>
@@ -282,6 +272,9 @@ let confirmCallback = null;
 let notifyReload = false;
 let tableBuilderTarget = null;
 let tableBuilderCache = {};
+let tableBuilderRowLabels = {};
+let tableBuilderColsCount = 3;
+let tableBuilderRowsCount = 3;
 
 function showAdminTab(tabId, btn) {
     document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
@@ -296,14 +289,162 @@ function showConfirm(title, message, onConfirm) {
     confirmCallback = onConfirm;
     document.getElementById('confirmModal').style.display = 'flex';
     document.getElementById('confirmOkBtn').onclick = () => {
+        const cb = confirmCallback;
         closeConfirm();
-        if (confirmCallback) confirmCallback();
+        if (cb) cb();
     };
 }
 
 function closeConfirm() {
     document.getElementById('confirmModal').style.display = 'none';
     confirmCallback = null;
+}
+
+async function apiPost(url) {
+    const res = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (res.status === 401) {
+        showNotify('Сессия истекла', 'Войдите в админку заново.', true);
+        return false;
+    }
+    if (!res.ok) return false;
+    try {
+        const data = await res.json();
+        return data.success !== false;
+    } catch {
+        return true;
+    }
+}
+
+function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str ?? '';
+    return d.innerHTML;
+}
+
+async function syncCategoriesFromServer() {
+    const res = await fetch('/wiki', { credentials: 'same-origin' });
+    const data = await res.json();
+    const prevDetailId = currentDetailCategory?.id;
+    ADMIN_CATEGORIES.splice(0, ADMIN_CATEGORIES.length, ...(data.categories || []));
+    if (prevDetailId) {
+        const cat = ADMIN_CATEGORIES.find(c => c.id === prevDetailId);
+        if (cat) {
+            currentDetailCategory = cat;
+            document.getElementById('detailCatName').textContent = cat.name;
+            document.getElementById('detailCatDesc').textContent = cat.description;
+            document.getElementById('editCatId').value = cat.id;
+            document.getElementById('editCatName').value = cat.name;
+            document.getElementById('editCatDesc').value = cat.description;
+            renderAdminArticles(cat.articles || []);
+        }
+    }
+    renderCategoriesGrid();
+    refreshCategorySelect();
+    return ADMIN_CATEGORIES;
+}
+
+function updateCategoryLocally(id, patch) {
+    const idx = ADMIN_CATEGORIES.findIndex(c => c.id === id);
+    if (idx < 0) return;
+    const articles = ADMIN_CATEGORIES[idx].articles;
+    ADMIN_CATEGORIES[idx] = { ...ADMIN_CATEGORIES[idx], ...patch, articles };
+    if (currentDetailCategory?.id === id) {
+        currentDetailCategory = ADMIN_CATEGORIES[idx];
+        document.getElementById('detailCatName').textContent = ADMIN_CATEGORIES[idx].name;
+        document.getElementById('detailCatDesc').textContent = ADMIN_CATEGORIES[idx].description;
+    }
+    renderCategoriesGrid();
+    refreshCategorySelect();
+}
+
+function renderCategoriesGrid() {
+    const grid = document.getElementById('adminCatGrid');
+    if (!ADMIN_CATEGORIES.length) {
+        grid.innerHTML = '<div class="wiki-empty">Категорий пока нет</div>';
+        return;
+    }
+    grid.innerHTML = ADMIN_CATEGORIES.map(c => `
+        <div class="admin-cat-card" data-id="${escapeHtml(c.id)}">
+            <div class="admin-cat-head">
+                <h4>${escapeHtml(c.name)}</h4>
+                <span class="wiki-tag wiki-tag-green">${(c.articles || []).length} статей</span>
+            </div>
+            <p>${escapeHtml(c.description || '')}</p>
+            <div class="admin-cat-actions">
+                <button type="button" class="btn btn-primary btn-small" data-action="open">Открыть</button>
+                <button type="button" class="btn btn-secondary btn-small" data-action="edit">Изменить</button>
+                <button type="button" class="btn btn-danger btn-small" data-action="delete">Удалить</button>
+            </div>
+        </div>
+    `).join('');
+    grid.querySelectorAll('.admin-cat-card').forEach(card => {
+        const id = card.dataset.id;
+        card.querySelector('[data-action="open"]')?.addEventListener('click', () => openCategoryDetail(id));
+        card.querySelector('[data-action="edit"]')?.addEventListener('click', () => quickEditCategory(id));
+        card.querySelector('[data-action="delete"]')?.addEventListener('click', () => confirmDeleteCategory(id));
+    });
+}
+
+function refreshCategorySelect() {
+    const select = document.getElementById('addArticleCategory');
+    const current = select.value;
+    select.innerHTML = '<option value="">Выберите категорию</option>' +
+        ADMIN_CATEGORIES.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+    if (current && ADMIN_CATEGORIES.some(c => c.id === current)) select.value = current;
+}
+
+function renderTasksList(messages) {
+    const list = document.getElementById('adminTaskList');
+    if (!messages.length) {
+        list.innerHTML = '<div class="wiki-empty">Задач пока нет</div>';
+        return;
+    }
+    list.innerHTML = messages.map(m => `
+        <div class="admin-task-row priority-${m.priority}" data-task-id="${m.id}">
+            <div>
+                <h4>${escapeHtml(m.title)}</h4>
+                <p>${escapeHtml((m.content || '').substring(0, 120))}${(m.content || '').length > 120 ? '…' : ''}</p>
+                <div class="admin-task-meta">
+                    <span>👤 ${escapeHtml(m.assigned_to)}</span>
+                    <span class="task-priority priority-${m.priority}">${m.priority}</span>
+                    <span class="task-status status-${m.status}">${m.status}</span>
+                    <span>📅 ${escapeHtml(m.created_at)}</span>
+                </div>
+            </div>
+            <button type="button" class="btn btn-danger btn-small" data-action="delete-task">Удалить</button>
+        </div>
+    `).join('');
+    list.querySelectorAll('[data-action="delete-task"]').forEach(btn => {
+        btn.addEventListener('click', () => confirmDeleteTask(Number(btn.closest('[data-task-id]').dataset.taskId)));
+    });
+}
+
+async function refreshTasksFromServer() {
+    const res = await fetch('/messages', { credentials: 'same-origin' });
+    const data = await res.json();
+    renderTasksList(data.messages || []);
+}
+
+function removeCategoryLocally(id) {
+    const idx = ADMIN_CATEGORIES.findIndex(c => c.id === id);
+    if (idx >= 0) ADMIN_CATEGORIES.splice(idx, 1);
+    if (currentDetailCategory?.id === id) backToCategoriesList();
+    renderCategoriesGrid();
+    refreshCategorySelect();
+}
+
+function removeArticleLocally(articleId) {
+    if (currentDetailCategory) {
+        currentDetailCategory.articles = (currentDetailCategory.articles || []).filter(a => a.id !== articleId);
+        const master = ADMIN_CATEGORIES.find(c => c.id === currentDetailCategory.id);
+        if (master) master.articles = currentDetailCategory.articles;
+        renderAdminArticles(currentDetailCategory.articles);
+    }
+    renderCategoriesGrid();
 }
 
 function showNotify(title, message, reload = false) {
@@ -342,8 +483,10 @@ function wrapCodeBlock(id) {
 function openTableBuilder(textareaId) {
     tableBuilderTarget = textareaId;
     tableBuilderCache = {};
-    document.getElementById('tableCols').value = '3';
-    document.getElementById('tableRows').value = '3';
+    tableBuilderRowLabels = {};
+    tableBuilderColsCount = 3;
+    tableBuilderRowsCount = 3;
+    updateTableBuilderDimensionDisplay();
     renderTableBuilderGrid();
     document.getElementById('tableBuilderModal').style.display = 'flex';
 }
@@ -353,27 +496,57 @@ function closeTableBuilder() {
     tableBuilderTarget = null;
 }
 
+function updateTableBuilderDimensionDisplay() {
+    document.getElementById('tableColsValue').textContent = tableBuilderColsCount;
+    document.getElementById('tableRowsValue').textContent = Math.max(0, tableBuilderRowsCount - 1);
+}
+
+function changeTableBuilderCols(delta) {
+    saveTableBuilderInputs();
+    tableBuilderColsCount = Math.min(8, Math.max(2, tableBuilderColsCount + delta));
+    updateTableBuilderDimensionDisplay();
+    renderTableBuilderGrid();
+}
+
+function changeTableBuilderRows(delta) {
+    saveTableBuilderInputs();
+    tableBuilderRowsCount = Math.min(11, Math.max(2, tableBuilderRowsCount + delta));
+    updateTableBuilderDimensionDisplay();
+    renderTableBuilderGrid();
+}
+
 function saveTableBuilderInputs() {
-    document.querySelectorAll('#tableBuilderGrid input').forEach(inp => {
+    document.querySelectorAll('#tableBuilderGrid input[data-c]').forEach(inp => {
         tableBuilderCache[`${inp.dataset.r}-${inp.dataset.c}`] = inp.value;
     });
+    document.querySelectorAll('#tableBuilderGrid input[data-row-label]').forEach(inp => {
+        tableBuilderRowLabels[inp.dataset.rowLabel] = inp.value;
+    });
+}
+
+function getTableBuilderRowLabel(r) {
+    return (tableBuilderRowLabels[String(r)] || '').trim();
 }
 
 function renderTableBuilderGrid() {
     saveTableBuilderInputs();
-    const cols = parseInt(document.getElementById('tableCols').value, 10);
-    const rows = parseInt(document.getElementById('tableRows').value, 10);
+    const cols = tableBuilderColsCount;
+    const rows = tableBuilderRowsCount;
     const wrap = document.getElementById('tableBuilderGrid');
 
     let html = '<table class="table-builder-grid"><tbody>';
     for (let r = 0; r < rows; r++) {
         html += '<tr>';
-        html += `<td class="table-builder-row-label">${r === 0 ? 'Шапка' : r + ' строка'}</td>`;
+        const rowLabelKey = String(r);
+        const cachedLabel = tableBuilderRowLabels[rowLabelKey];
+        const defaultLabel = cachedLabel !== undefined ? cachedLabel : '';
+        const labelPlaceholder = r === 0 ? 'Угол таблицы' : `Строка ${r}`;
+        html += `<td class="table-builder-row-label"><input type="text" class="table-builder-row-label-input" data-row-label="${r}" value="${escAttr(defaultLabel)}" placeholder="${labelPlaceholder}"></td>`;
         for (let c = 0; c < cols; c++) {
             const key = `${r}-${c}`;
             const cached = tableBuilderCache[key];
-            const defaultVal = cached !== undefined ? cached : (r === 0 ? `Заголовок ${c + 1}` : '');
-            const placeholder = r === 0 ? 'Заголовок' : 'Значение';
+            const defaultVal = cached !== undefined ? cached : '';
+            const placeholder = r === 0 ? `Заголовок ${c + 1}` : 'Значение';
             html += `<td><input type="text" data-r="${r}" data-c="${c}" value="${escAttr(defaultVal)}" placeholder="${placeholder}"></td>`;
         }
         html += '</tr>';
@@ -389,20 +562,36 @@ function escAttr(str) {
 function insertTableFromBuilder() {
     if (!tableBuilderTarget) return;
     saveTableBuilderInputs();
-    const cols = parseInt(document.getElementById('tableCols').value, 10);
-    const rows = parseInt(document.getElementById('tableRows').value, 10);
+    const cols = tableBuilderColsCount;
+    const rows = tableBuilderRowsCount;
     const get = (r, c) => (tableBuilderCache[`${r}-${c}`] || '').trim();
+    const emptyCell = '—';
 
-    const header = [];
+    const colHeaders = [];
     for (let c = 0; c < cols; c++) {
-        header.push(get(0, c) || `Столбец ${c + 1}`);
+        colHeaders.push(get(0, c) || `Столбец ${c + 1}`);
+    }
+
+    const useRowLabels = Array.from({ length: rows - 1 }, (_, i) => i + 1)
+        .some(r => getTableBuilderRowLabel(r) || getTableBuilderRowLabel(0));
+
+    let header;
+    if (useRowLabels) {
+        header = [getTableBuilderRowLabel(0) || emptyCell, ...colHeaders];
+    } else {
+        header = colHeaders;
     }
 
     const sepCells = header.map(() => '---');
     let md = '\n| ' + header.join(' | ') + ' |\n| ' + sepCells.join(' | ') + ' |\n';
     for (let r = 1; r < rows; r++) {
         const row = [];
-        for (let c = 0; c < cols; c++) row.push(get(r, c));
+        if (useRowLabels) {
+            row.push(getTableBuilderRowLabel(r) || `Строка ${r}`);
+        }
+        for (let c = 0; c < cols; c++) {
+            row.push(get(r, c) || emptyCell);
+        }
         md += '| ' + row.join(' | ') + ' |\n';
     }
 
@@ -525,8 +714,16 @@ async function handleAddCategory(e) {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target));
     const res = await fetch('/api/add_category', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
-    if (res.ok) showNotify('Категория создана', 'Новый раздел добавлен в базу знаний.', true);
-    else showNotify('Ошибка', 'Не удалось создать категорию.');
+    if (res.ok) {
+        const result = await res.json();
+        if (result.category) {
+            ADMIN_CATEGORIES.push(result.category);
+            renderCategoriesGrid();
+            refreshCategorySelect();
+        }
+        e.target.reset();
+        showNotify('Категория создана', 'Новый раздел добавлен в базу знаний.');
+    } else showNotify('Ошибка', 'Не удалось создать категорию.');
 }
 
 async function handleUpdateCategory(e) {
@@ -534,18 +731,23 @@ async function handleUpdateCategory(e) {
     const id = document.getElementById('editCatId').value;
     const data = { name: document.getElementById('editCatName').value, description: document.getElementById('editCatDesc').value };
     const res = await fetch(`/api/update_category/${id}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
-    if (res.ok) showNotify('Сохранено', 'Категория обновлена.', true);
-    else showNotify('Ошибка', 'Не удалось обновить категорию.');
+    if (res.ok) {
+        const result = await res.json();
+        if (result.category) updateCategoryLocally(id, result.category);
+        else updateCategoryLocally(id, data);
+        showNotify('Сохранено', 'Категория обновлена.');
+    } else showNotify('Ошибка', 'Не удалось обновить категорию.');
 }
 
 async function handleAddArticle(e) {
     e.preventDefault();
     const res = await fetch('/api/add_article', { method: 'POST', body: new FormData(e.target) });
     if (res.ok) {
-        showNotify('Статья опубликована', 'Материал добавлен в базу знаний.');
+        await syncCategoriesFromServer();
         e.target.reset();
         document.getElementById('imagesPreview').style.display = 'none';
         document.getElementById('filesList').innerHTML = '';
+        showNotify('Статья опубликована', 'Материал добавлен в базу знаний.');
     } else showNotify('Ошибка', 'Не удалось сохранить статью.');
 }
 
@@ -559,8 +761,20 @@ async function handleUpdateArticle(e) {
     if (editRemoveFiles.length) fd.set('remove_files', editRemoveFiles.join(','));
     const res = await fetch(`/api/update_article/${id}`, { method: 'POST', body: fd });
     if (res.ok) {
+        const result = await res.json();
+        if (result.article && currentDetailCategory) {
+            const articles = currentDetailCategory.articles || [];
+            const idx = articles.findIndex(a => a.id === id);
+            if (idx >= 0) articles[idx] = result.article;
+            currentDetailCategory.articles = articles;
+            const master = ADMIN_CATEGORIES.find(c => c.id === currentDetailCategory.id);
+            if (master) master.articles = articles;
+            renderAdminArticles(articles);
+        } else {
+            await syncCategoriesFromServer();
+        }
         closeEditArticle();
-        showNotify('Сохранено', 'Статья обновлена.', true);
+        showNotify('Сохранено', 'Статья обновлена.');
     } else showNotify('Ошибка', 'Не удалось обновить статью.');
 }
 
@@ -573,34 +787,41 @@ async function handleAddTask(e) {
         priority: document.getElementById('taskPriority').value
     };
     const res = await fetch('/api/add_message', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
-    if (res.ok) showNotify('Задача добавлена', 'Новая задача создана.', true);
-    else showNotify('Ошибка', 'Не удалось создать задачу.');
+    if (res.ok) {
+        e.target.reset();
+        await refreshTasksFromServer();
+        showNotify('Задача добавлена', 'Новая задача создана.');
+    } else showNotify('Ошибка', 'Не удалось создать задачу.');
 }
 
 function confirmDeleteCategory(id) {
     const cat = ADMIN_CATEGORIES.find(c => c.id === id);
     const name = cat ? cat.name : 'категория';
     showConfirm('Удалить категорию?', `Категория «${name}» и все её статьи будут удалены безвозвратно.`, async () => {
-        const res = await fetch(`/api/delete_category/${id}`, { method: 'POST' });
-        if (res.ok) showNotify('Удалено', 'Категория удалена.', true);
-        else showNotify('Ошибка', 'Не удалось удалить категорию.');
+        if (await apiPost(`/api/delete_category/${id}`)) {
+            removeCategoryLocally(id);
+            showNotify('Удалено', 'Категория удалена.');
+        } else showNotify('Ошибка', 'Не удалось удалить категорию.');
     });
 }
 
 function confirmDeleteTask(id) {
     showConfirm('Удалить задачу?', 'Задача будет удалена безвозвратно.', async () => {
-        const res = await fetch(`/api/delete_message/${id}`, { method: 'POST' });
-        if (res.ok) showNotify('Удалено', 'Задача удалена.', true);
-        else showNotify('Ошибка', 'Не удалось удалить задачу.');
+        if (await apiPost(`/api/delete_message/${id}`)) {
+            await refreshTasksFromServer();
+            showNotify('Удалено', 'Задача удалена.');
+        } else showNotify('Ошибка', 'Не удалось удалить задачу.');
     });
 }
 
 function confirmDeleteCurrentArticle() {
     const id = document.getElementById('editArticleId').value;
     showConfirm('Удалить статью?', 'Статья будет удалена безвозвратно.', async () => {
-        const res = await fetch(`/api/delete_article/${id}`, { method: 'POST' });
-        if (res.ok) { closeEditArticle(); showNotify('Удалено', 'Статья удалена.', true); }
-        else showNotify('Ошибка', 'Не удалось удалить статью.');
+        if (await apiPost(`/api/delete_article/${id}`)) {
+            closeEditArticle();
+            removeArticleLocally(id);
+            showNotify('Удалено', 'Статья удалена.');
+        } else showNotify('Ошибка', 'Не удалось удалить статью.');
     });
 }
 </script>
