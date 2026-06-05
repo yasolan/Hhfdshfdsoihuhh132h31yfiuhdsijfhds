@@ -1,0 +1,780 @@
+{% extends "base.html" %}
+
+{% block title %}NOC Utilities{% endblock %}
+
+{% block content %}
+<div class="tabs-nav">
+    <button class="tab-btn active" onclick="openTab('lac-tac', this)">📡 LAC/TAC</button>
+    <button class="tab-btn" onclick="openTab('logs', this)">📋 Логи</button>
+    <button class="tab-btn" onclick="openTab('wiki', this)">📚 База знаний</button>
+    <button class="tab-btn" onclick="openTab('messages', this)">📋 Задачи</button>
+</div>
+
+<div class="tab-content">
+    <!-- LAC/TAC -->
+    <div id="lac-tac" class="tab-pane active">
+        <div class="lac-portal">
+            <div class="lac-hero">
+                <div class="lac-hero-icon">📡</div>
+                <div>
+                    <h2>LAC/TAC Expander</h2>
+                    <p>Разбор диапазонов и списков идентификаторов для операционной работы</p>
+                </div>
+            </div>
+            <div class="lac-workspace">
+                <div class="lac-panel lac-input-panel">
+                    <label class="lac-label">Введите значения</label>
+                    <input type="text" id="lacInput" placeholder="324-1000, 5, 10-12">
+                    <div class="lac-hints">
+                        <span class="lac-hint-chip">324-1000</span>
+                        <span class="lac-hint-chip">5, 10, 12</span>
+                        <span class="lac-hint-chip">100-105, 200</span>
+                    </div>
+                    <div class="lac-actions">
+                        <button class="btn btn-primary" onclick="handleExpand()">⚡ Разобрать</button>
+                        <button id="copyButton" class="btn btn-orange" onclick="copyResult()" style="display:none;">📋 Копировать</button>
+                    </div>
+                </div>
+                <div class="lac-panel lac-result-panel">
+                    <div class="lac-result-header">
+                        <span>Результат</span>
+                        <span id="lacResultCount" class="lac-count" style="display:none;"></span>
+                    </div>
+                    <div id="expandResult" class="lac-result-body" style="display:none;">
+                        <pre id="resultText"></pre>
+                    </div>
+                    <div id="lacPlaceholder" class="lac-placeholder">Результат появится здесь после разбора</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Логи -->
+    <div id="logs" class="tab-pane">
+        <div class="card">
+            <h3>📋 История операций</h3>
+            <table id="logsTable">
+                <thead><tr><th>Дата и время</th><th>IP</th><th>Введено</th><th>Чисел</th></tr></thead>
+                <tbody><tr><td colspan="4" class="text-center">Загрузка...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- База знаний -->
+    <div id="wiki" class="tab-pane">
+        <div class="wiki-portal">
+            <div id="wikiBreadcrumb" class="wiki-breadcrumb" style="display:none;"></div>
+
+            <div id="wikiHomeView">
+                <div class="wiki-hero">
+                    <div class="wiki-hero-top">
+                        <h2>📚 База знаний NOC</h2>
+                        <p>Внутренняя документация по процессам, блокировкам и операционным инструкциям.</p>
+                    </div>
+                    <div class="wiki-hero-body">
+                        <div class="wiki-stats" id="wikiStats"></div>
+                        <div class="wiki-search-wrap">
+                            <input type="text" id="wikiSearch" placeholder="Поиск по категориям и статьям..." oninput="filterWiki()">
+                            <div class="wiki-search-hint">Например: «блокировка», «VLAN», «Мегафон»</div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="wiki-section-title">Порталы категорий</h3>
+                <div id="wikiGrid" class="wiki-portal-grid"></div>
+
+                <div id="wikiRecent" class="wiki-recent" style="display:none;">
+                    <h3 class="wiki-section-title">Недавние статьи</h3>
+                    <div id="wikiRecentList" class="wiki-recent-list"></div>
+                </div>
+            </div>
+
+            <div id="wikiCategoryView" style="display:none;">
+                <div class="wiki-hero" style="margin-bottom:18px;">
+                    <div class="wiki-hero-top" style="padding:20px 28px;">
+                        <h2 id="categoryName" style="font-size:22px;"></h2>
+                        <p id="categoryDesc"></p>
+                    </div>
+                    <div class="wiki-hero-body" style="padding:16px 28px;">
+                        <div class="wiki-search-wrap" style="max-width:none;">
+                            <input type="text" id="wikiCategorySearch" placeholder="Поиск в категории..." oninput="filterWiki()">
+                        </div>
+                    </div>
+                </div>
+                <div id="wikiArticleList" class="wiki-article-table"></div>
+            </div>
+
+            <div id="wikiArticleView" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- Задачи -->
+    <div id="messages" class="tab-pane">
+        <div class="tasks-portal">
+            <div class="wiki-hero tasks-hero">
+                <div class="wiki-hero-top">
+                    <h2>📋 Задачи NOC</h2>
+                    <p>Операционные поручения, статусы и назначения для команды.</p>
+                </div>
+                <div class="wiki-hero-body">
+                    <div class="wiki-stats" id="taskStats"></div>
+                    <div class="wiki-search-wrap">
+                        <input type="text" id="taskSearch" placeholder="Поиск по названию, тексту, исполнителю..." oninput="filterTasks()">
+                        <div class="wiki-search-hint">Например: «блокировка», «Иванов», «срочно»</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="task-filters" id="taskFilters">
+                <button class="task-filter-btn active" data-status="all" onclick="setTaskFilter('all', this)">Все</button>
+                <button class="task-filter-btn" data-status="pending" onclick="setTaskFilter('pending', this)">В ожидании</button>
+                <button class="task-filter-btn" data-status="in_progress" onclick="setTaskFilter('in_progress', this)">В работе</button>
+                <button class="task-filter-btn" data-status="done" onclick="setTaskFilter('done', this)">Готово</button>
+            </div>
+
+            <div id="taskList" class="task-table"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно задачи -->
+<div id="messageModal" class="modal task-modal" style="display:none;">
+    <div class="modal-content task-modal-content">
+        <div class="task-modal-head">
+            <div>
+                <div class="task-modal-label">Задача</div>
+                <h3 id="modalTitle">Заголовок</h3>
+            </div>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body task-modal-body" id="modalBody"></div>
+        <div class="modal-footer task-modal-footer">
+            <label class="task-status-label">Статус:</label>
+            <select id="statusSelect" class="task-status-select" onchange="updateStatusFromModal()">
+                <option value="pending">В ожидании</option>
+                <option value="in_progress">В работе</option>
+                <option value="done">Готово</option>
+            </select>
+            <button class="btn btn-secondary" onclick="closeModal()">Закрыть</button>
+        </div>
+    </div>
+</div>
+
+<!-- Модалка для полноразмерного изображения -->
+<div id="imageModal" class="modal" style="display:none; background: rgba(0,0,0,0.9);" onclick="closeImageModal()">
+    <span class="modal-close" style="position:absolute; top:20px; right:40px; font-size:40px; color:white; cursor:pointer;">&times;</span>
+    <img id="fullImage" style="max-width:90%; max-height:90%; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+</div>
+
+<div id="notification" class="notification"></div>
+
+<script>
+let currentWikiData = [];
+let currentCategory = null;
+let currentMessageId = null;
+let allTasks = [];
+let currentTaskFilter = 'all';
+
+function updatePageUrl(tabId, categoryId, articleId) {
+    const params = new URLSearchParams();
+    if (tabId && tabId !== 'lac-tac') params.set('tab', tabId);
+    if (tabId === 'wiki' && categoryId) params.set('category', categoryId);
+    if (tabId === 'wiki' && articleId) params.set('article', articleId);
+    const qs = params.toString();
+    history.replaceState(null, '', qs ? '/?' + qs : '/');
+}
+
+let pendingArticleId = null;
+
+function openTab(tabId, btn, categoryId, articleId) {
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    btn.classList.add('active');
+    if(tabId === 'logs') loadLogs();
+    if(tabId === 'wiki') {
+        pendingArticleId = articleId || null;
+        loadWiki(categoryId || null);
+    }
+    if(tabId === 'messages') loadTasks();
+    updatePageUrl(tabId, tabId === 'wiki' ? categoryId : null, tabId === 'wiki' ? articleId : null);
+}
+
+function initFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (!tab) return;
+    const category = params.get('category');
+    const article = params.get('article');
+    const btn = [...document.querySelectorAll('.tab-btn')].find(b =>
+        b.getAttribute('onclick')?.includes(`'${tab}'`)
+    );
+    if (btn) openTab(tab, btn, category || undefined, article || undefined);
+}
+
+function showNotification(msg, isError = false) {
+    const n = document.getElementById('notification');
+    n.textContent = msg;
+    n.style.background = isError ? '#c62828' : 'linear-gradient(135deg, #21A038, #158a2a)';
+    n.style.display = 'block';
+    setTimeout(() => n.style.display = 'none', 3000);
+}
+
+async function handleExpand() {
+    const input = document.getElementById('lacInput').value;
+    try {
+        const res = await fetch('/expand', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({input, split_columns: true})
+        });
+        const data = await res.json();
+        if(data.chunks && data.chunks.length > 0) {
+            // Объединяем все чанки в один плоский массив
+            const allNumbers = data.chunks.flat();
+            if(allNumbers.length > 0) {
+                document.getElementById('resultText').textContent = allNumbers.join('\n');
+                document.getElementById('expandResult').style.display = 'block';
+                document.getElementById('lacPlaceholder').style.display = 'none';
+                document.getElementById('lacResultCount').style.display = 'inline';
+                document.getElementById('lacResultCount').textContent = allNumbers.length + ' чисел';
+                document.getElementById('copyButton').style.display = 'inline-block';
+            } else {
+                document.getElementById('expandResult').style.display = 'none';
+                document.getElementById('lacPlaceholder').style.display = 'block';
+                document.getElementById('lacResultCount').style.display = 'none';
+                document.getElementById('copyButton').style.display = 'none';
+                showNotification('❌ Неверный ввод или пустой результат', true);
+            }
+        } else {
+            document.getElementById('expandResult').style.display = 'none';
+            document.getElementById('lacPlaceholder').style.display = 'block';
+            document.getElementById('lacResultCount').style.display = 'none';
+            document.getElementById('copyButton').style.display = 'none';
+            showNotification('❌ Неверный ввод или пустой результат', true);
+        }
+    } catch(e) {
+        showNotification('❌ Ошибка сети', true);
+    }
+}
+
+function copyResult() {
+    const text = document.getElementById('resultText').textContent;
+    if (!text) {
+        showNotification('❌ Нечего копировать', true);
+        return;
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+            showNotification('✅ Скопировано!');
+        }).catch(() => {
+            fallbackCopy(text);
+        });
+    } else {
+        fallbackCopy(text);
+    }
+}
+
+function fallbackCopy(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+        document.execCommand('copy');
+        showNotification('✅ Скопировано!');
+    } catch (err) {
+        showNotification('❌ Не удалось скопировать', true);
+    }
+    document.body.removeChild(textarea);
+}
+
+async function loadLogs() {
+    try {
+        const res = await fetch('/get_logs');
+        const data = await res.json();
+        const tbody = document.querySelector('#logsTable tbody');
+        if(data.logs && data.logs.length > 0) {
+            tbody.innerHTML = data.logs.slice(-20).reverse().map(l =>
+                `<tr><td>${new Date(l.timestamp).toLocaleString('ru-RU')}</td><td>${l.ip}</td><td>${l.input}</td><td>${l.count}</td></tr>`
+            ).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Нет записей</td></tr>';
+        }
+    } catch(e) {
+        document.querySelector('#logsTable tbody').innerHTML = '<tr><td colspan="4" class="text-center">Ошибка загрузки</td></tr>';
+    }
+}
+
+function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+function getWikiStats(categories) {
+    const articleCount = categories.reduce((sum, c) => sum + (c.articles ? c.articles.length : 0), 0);
+    return { categories: categories.length, articles: articleCount };
+}
+
+function renderWikiStats(categories) {
+    const stats = getWikiStats(categories);
+    document.getElementById('wikiStats').innerHTML = `
+        <div class="wiki-stat"><span class="wiki-stat-value">${stats.categories}</span><span class="wiki-stat-label">Категорий</span></div>
+        <div class="wiki-stat"><span class="wiki-stat-value">${stats.articles}</span><span class="wiki-stat-label">Статей</span></div>
+    `;
+}
+
+function renderWikiBreadcrumb(items) {
+    const el = document.getElementById('wikiBreadcrumb');
+    if (!items || items.length === 0) {
+        el.style.display = 'none';
+        return;
+    }
+    el.style.display = 'flex';
+    el.innerHTML = items.map((item, i) => {
+        const isLast = i === items.length - 1;
+        const part = isLast
+            ? `<span class="current">${escapeHtml(item.label)}</span>`
+            : `<button type="button" onclick="${item.action}">${escapeHtml(item.label)}</button>`;
+        return (i > 0 ? '<span class="sep">›</span>' : '') + part;
+    }).join('');
+}
+
+function hideAllWikiViews() {
+    document.getElementById('wikiHomeView').style.display = 'none';
+    document.getElementById('wikiCategoryView').style.display = 'none';
+    document.getElementById('wikiArticleView').style.display = 'none';
+}
+
+function showWikiHome() {
+    currentCategory = null;
+    hideAllWikiViews();
+    document.getElementById('wikiHomeView').style.display = 'block';
+    renderWikiBreadcrumb([]);
+    document.getElementById('wikiSearch').value = '';
+}
+
+function showWikiCategoryView() {
+    hideAllWikiViews();
+    document.getElementById('wikiCategoryView').style.display = 'block';
+}
+
+function showWikiArticleView() {
+    hideAllWikiViews();
+    document.getElementById('wikiArticleView').style.display = 'block';
+}
+
+function getRecentArticles(categories, limit = 6) {
+    const all = [];
+    categories.forEach(cat => {
+        (cat.articles || []).forEach(art => {
+            all.push({ ...art, categoryName: cat.name, categoryId: cat.id });
+        });
+    });
+    return all.slice(-limit).reverse();
+}
+
+function renderRecentArticles(categories) {
+    const recent = getRecentArticles(categories);
+    const block = document.getElementById('wikiRecent');
+    const list = document.getElementById('wikiRecentList');
+    if (!recent.length) {
+        block.style.display = 'none';
+        return;
+    }
+    block.style.display = 'block';
+    list.innerHTML = recent.map(art => `
+        <div class="wiki-recent-item" data-article-id="${escapeHtml(art.id)}">
+            <span class="title">${escapeHtml(art.title)}</span>
+            <span class="cat-tag">${escapeHtml(art.categoryName)}</span>
+        </div>
+    `).join('');
+    list.querySelectorAll('.wiki-recent-item').forEach(el => {
+        el.addEventListener('click', () => openArticle(el.dataset.articleId));
+    });
+}
+
+async function loadWiki(categoryId) {
+    try {
+        const res = await fetch('/wiki');
+        const data = await res.json();
+        currentWikiData = data.categories || [];
+        if (pendingArticleId) {
+            await openArticle(pendingArticleId, false);
+            pendingArticleId = null;
+        } else if (categoryId) {
+            await showCategory(categoryId, false);
+        } else {
+            showWikiHome();
+            renderWikiStats(currentWikiData);
+            renderWiki(currentWikiData);
+            renderRecentArticles(currentWikiData);
+        }
+    } catch(e) {
+        document.getElementById('wikiGrid').innerHTML = '<div class="wiki-empty">Ошибка загрузки базы знаний</div>';
+    }
+}
+
+function renderWiki(categories) {
+    const grid = document.getElementById('wikiGrid');
+    if(categories.length === 0) {
+        grid.innerHTML = '<div class="wiki-empty">Категории пока не созданы</div>';
+        return;
+    }
+    grid.innerHTML = categories.map(c => `
+        <div class="wiki-portal-box" data-category-id="${escapeHtml(c.id)}">
+            <div class="wiki-portal-head"><h4>${escapeHtml(c.name)}</h4></div>
+            <div class="wiki-portal-body">
+                <p>${escapeHtml(c.description || 'Без описания')}</p>
+                <div class="wiki-portal-meta">
+                    <span class="wiki-tag wiki-tag-green">${c.articles.length} статей</span>
+                    ${c.articles.some(a => a.files && a.files.length) ? '<span class="wiki-tag wiki-tag-orange">есть файлы</span>' : ''}
+                </div>
+            </div>
+            <div class="wiki-portal-foot">Открыть портал →</div>
+        </div>
+    `).join('');
+    grid.querySelectorAll('.wiki-portal-box').forEach(el => {
+        el.addEventListener('click', () => showCategory(el.dataset.categoryId));
+    });
+}
+
+function filterWiki() {
+    if (currentCategory) {
+        const query = (document.getElementById('wikiCategorySearch').value || '').toLowerCase();
+        const filteredArticles = currentCategory.articles.filter(art =>
+            art.title.toLowerCase().includes(query) ||
+            art.content.toLowerCase().includes(query)
+        );
+        renderArticles(filteredArticles);
+        return;
+    }
+    const query = (document.getElementById('wikiSearch').value || '').toLowerCase();
+    if (!currentWikiData.length) return;
+    const filtered = currentWikiData.filter(cat =>
+        cat.name.toLowerCase().includes(query) ||
+        (cat.description || '').toLowerCase().includes(query) ||
+        cat.articles.some(a =>
+            a.title.toLowerCase().includes(query) ||
+            a.content.toLowerCase().includes(query)
+        )
+    );
+    renderWiki(filtered);
+    renderRecentArticles(filtered);
+}
+
+async function showCategory(catId, updateUrl = true) {
+    try {
+        const res = await fetch('/wiki/category/' + catId);
+        const cat = await res.json();
+        if (cat.error) throw new Error(cat.error);
+        currentCategory = cat;
+        showWikiCategoryView();
+        document.getElementById('categoryName').textContent = cat.name;
+        document.getElementById('categoryDesc').textContent = cat.description || '';
+        document.getElementById('wikiCategorySearch').value = '';
+        renderWikiBreadcrumb([
+            { label: 'Главная', action: 'backToCategories()' },
+            { label: cat.name }
+        ]);
+        renderArticles(cat.articles);
+        if (updateUrl) updatePageUrl('wiki', catId, null);
+    } catch(e) {
+        showNotification('❌ Ошибка загрузки категории', true);
+    }
+}
+
+function renderArticles(articles) {
+    const list = document.getElementById('wikiArticleList');
+    if(!articles || articles.length === 0) {
+        list.innerHTML = '<div class="wiki-empty">В этой категории пока нет статей</div>';
+        return;
+    }
+    list.innerHTML = articles.map(art => `
+        <div class="wiki-article-row" data-article-id="${escapeHtml(art.id)}">
+            <div>
+                <h4>${escapeHtml(art.title)}</h4>
+                <p class="excerpt">${art.excerpt_html || ''}</p>
+            </div>
+            <div class="wiki-article-badges">
+                ${art.files && art.files.length ? `<span class="wiki-tag wiki-tag-orange">📎 ${art.files.length}</span>` : ''}
+                ${art.images && art.images.length ? `<span class="wiki-tag wiki-tag-green">🖼 ${art.images.length}</span>` : ''}
+            </div>
+        </div>
+    `).join('');
+    list.querySelectorAll('.wiki-article-row').forEach(el => {
+        el.addEventListener('click', () => openArticle(el.dataset.articleId));
+    });
+}
+
+function backToCategories() {
+    showWikiHome();
+    renderWikiStats(currentWikiData);
+    renderWiki(currentWikiData);
+    renderRecentArticles(currentWikiData);
+    updatePageUrl('wiki', null, null);
+}
+
+function backToCategoryFromArticle() {
+    if (currentCategory) showCategory(currentCategory.id);
+    else backToCategories();
+}
+
+async function openArticle(id, updateUrl = true) {
+    try {
+        const res = await fetch('/wiki/article/' + id);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        const art = data.article;
+        const cat = data.category;
+        currentCategory = { id: cat.id, name: cat.name, description: cat.description, articles: cat.articles };
+        showWikiArticleView();
+        renderWikiBreadcrumb([
+            { label: 'Главная', action: 'backToCategories()' },
+            { label: cat.name, action: `showCategory('${cat.id}')` },
+            { label: art.title }
+        ]);
+        const imagesHtml = (art.images || []).length ? `
+            <section class="wiki-gallery-section" id="article-gallery">
+                <h3>Изображения</h3>
+                <div class="wiki-gallery">${art.images.map((img, i) =>
+                    `<img src="/static/${escapeHtml(img)}" alt="img${i}" onclick="openImageModal('/static/${escapeHtml(img)}')">`
+                ).join('')}</div>
+            </section>` : '';
+        const filesHtml = (art.files || []).length ? `
+            <section class="wiki-files-section" id="article-files">
+                <h3>Прикреплённые файлы</h3>
+                <div class="wiki-file-list">${art.files.map(f => `
+                    <div class="wiki-file-item">
+                        <span>📄</span>
+                        <span class="fname">${escapeHtml(f.split('/').pop())}</span>
+                        <a href="/static/${escapeHtml(f)}" download>Скачать</a>
+                    </div>`).join('')}
+                </div>
+            </section>` : '';
+        const sidebarArticles = (cat.articles || []).length > 1 ? `
+            <div class="wiki-sidebar-box">
+                <div class="wiki-sidebar-title">Статьи в разделе</div>
+                <ul class="wiki-sidebar-list">${cat.articles.map(a =>
+                    `<li><a href="#" class="${a.id === art.id ? 'active' : ''}" data-nav-article="${a.id}">${escapeHtml(a.title)}</a></li>`
+                ).join('')}</ul>
+            </div>` : '';
+        document.getElementById('wikiArticleView').innerHTML = `
+            <div class="wiki-page-layout">
+                <aside class="wiki-sidebar">
+                    <div class="wiki-sidebar-box">
+                        <div class="wiki-sidebar-title">Категория</div>
+                        <div style="padding:12px 14px;font-size:14px;font-weight:600;color:var(--primary-green);">${escapeHtml(cat.name)}</div>
+                    </div>
+                    ${sidebarArticles}
+                    <div class="wiki-sidebar-box">
+                        <div class="wiki-sidebar-title">Действия</div>
+                        <ul class="wiki-sidebar-list">
+                            <li><a href="#" onclick="copyArticleText();return false;">📋 Копировать текст</a></li>
+                        </ul>
+                    </div>
+                </aside>
+                <main>
+                    <div class="wiki-infobox">
+                        <div class="wiki-infobox-head">
+                            <div class="wiki-infobox-cat">📁 ${escapeHtml(cat.name)}</div>
+                            <h1>${escapeHtml(art.title)}</h1>
+                        </div>
+                        <div class="wiki-infobox-meta">
+                            ${art.images?.length ? `<span>🖼 ${art.images.length} изображений</span>` : ''}
+                            ${art.files?.length ? `<span>📎 ${art.files.length} файлов</span>` : ''}
+                            <span>📄 Внутренняя документация NOC</span>
+                        </div>
+                    </div>
+                    <article class="wiki-main-article">
+                        <div class="wiki-content" id="wikiArticleContent">${data.content_html}</div>
+                        ${imagesHtml}
+                        ${filesHtml}
+                        <div class="wiki-article-footer">
+                            <div class="wiki-meta-row"><strong>Последнее изменение:</strong> ${escapeHtml(art.updated_at || '—')} · IP: ${escapeHtml(art.updated_ip || '—')}</div>
+                            ${art.created_at && art.created_at !== art.updated_at ? `<div class="wiki-meta-row"><strong>Создано:</strong> ${escapeHtml(art.created_at)} · IP: ${escapeHtml(art.created_ip || '—')}</div>` : ''}
+                        </div>
+                    </article>
+                </main>
+            </div>`;
+        document.getElementById('wikiArticleView').querySelectorAll('[data-nav-article]').forEach(el => {
+            el.addEventListener('click', e => { e.preventDefault(); openArticle(el.dataset.navArticle); });
+        });
+        if (updateUrl) updatePageUrl('wiki', cat.id, id);
+    } catch(e) {
+        showNotification('❌ Ошибка загрузки статьи', true);
+    }
+}
+
+function copyArticleText() {
+    const text = document.getElementById('wikiArticleContent')?.innerText;
+    if (!text) return;
+    navigator.clipboard?.writeText(text).then(() => showNotification('✅ Скопировано!')).catch(() => fallbackCopy(text));
+}
+
+const TASK_STATUS_LABELS = {
+    pending: 'В ожидании',
+    in_progress: 'В работе',
+    done: 'Готово'
+};
+
+const TASK_PRIORITY_LABELS = {
+    high: 'Высокий',
+    medium: 'Средний',
+    low: 'Низкий'
+};
+
+function getTaskStats(tasks) {
+    return {
+        total: tasks.length,
+        pending: tasks.filter(t => t.status === 'pending').length,
+        in_progress: tasks.filter(t => t.status === 'in_progress').length,
+        done: tasks.filter(t => t.status === 'done').length
+    };
+}
+
+function renderTaskStats(tasks) {
+    const s = getTaskStats(tasks);
+    document.getElementById('taskStats').innerHTML = `
+        <div class="wiki-stat"><span class="wiki-stat-value">${s.total}</span><span class="wiki-stat-label">Всего</span></div>
+        <div class="wiki-stat"><span class="wiki-stat-value">${s.pending}</span><span class="wiki-stat-label">Ожидают</span></div>
+        <div class="wiki-stat"><span class="wiki-stat-value">${s.in_progress}</span><span class="wiki-stat-label">В работе</span></div>
+        <div class="wiki-stat"><span class="wiki-stat-value">${s.done}</span><span class="wiki-stat-label">Готово</span></div>
+    `;
+}
+
+function setTaskFilter(status, btn) {
+    currentTaskFilter = status;
+    document.querySelectorAll('.task-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filterTasks();
+}
+
+function filterTasks() {
+    const query = (document.getElementById('taskSearch').value || '').toLowerCase();
+    let tasks = allTasks;
+    if (currentTaskFilter !== 'all') {
+        tasks = tasks.filter(t => t.status === currentTaskFilter);
+    }
+    if (query) {
+        tasks = tasks.filter(t =>
+            t.title.toLowerCase().includes(query) ||
+            t.content.toLowerCase().includes(query) ||
+            t.assigned_to.toLowerCase().includes(query)
+        );
+    }
+    renderTasks(tasks);
+}
+
+function renderTasks(tasks) {
+    const list = document.getElementById('taskList');
+    if (!tasks.length) {
+        list.innerHTML = '<div class="wiki-empty">Задач не найдено</div>';
+        return;
+    }
+    list.innerHTML = tasks.map(m => `
+        <div class="task-row priority-${m.priority} status-${m.status}" data-task-id="${m.id}">
+            <div class="task-row-main">
+                <h4>${escapeHtml(m.title)}</h4>
+                <p class="excerpt">${escapeHtml(m.content.substring(0, 140))}${m.content.length > 140 ? '…' : ''}</p>
+            </div>
+            <div class="task-row-meta">
+                <span class="task-priority priority-${m.priority}">${TASK_PRIORITY_LABELS[m.priority] || m.priority}</span>
+                <span class="task-assignee">👤 ${escapeHtml(m.assigned_to)}</span>
+                <span class="task-status status-${m.status}">${TASK_STATUS_LABELS[m.status] || m.status}</span>
+                <span class="task-date">📅 ${escapeHtml(m.created_at)}</span>
+            </div>
+        </div>
+    `).join('');
+    list.querySelectorAll('.task-row').forEach(el => {
+        el.addEventListener('click', () => showMessage(Number(el.dataset.taskId)));
+    });
+}
+
+async function loadTasks() {
+    try {
+        const res = await fetch('/messages');
+        const data = await res.json();
+        allTasks = data.messages || [];
+        renderTaskStats(allTasks);
+        filterTasks();
+    } catch(e) {
+        document.getElementById('taskList').innerHTML = '<div class="wiki-empty">Ошибка загрузки задач</div>';
+    }
+}
+
+function showMessage(id) {
+    const m = allTasks.find(x => x.id === id);
+    if (!m) return;
+    currentMessageId = m.id;
+    document.getElementById('modalTitle').textContent = m.title;
+    document.getElementById('modalBody').innerHTML = `
+        <p class="task-modal-text">${escapeHtml(m.content)}</p>
+        <div class="task-modal-info">
+            <div class="task-info-item">
+                <span class="task-info-label">Приоритет</span>
+                <span class="task-priority priority-${m.priority}">${TASK_PRIORITY_LABELS[m.priority] || m.priority}</span>
+            </div>
+            <div class="task-info-item">
+                <span class="task-info-label">Исполнитель</span>
+                <span>👤 ${escapeHtml(m.assigned_to)}</span>
+            </div>
+            <div class="task-info-item">
+                <span class="task-info-label">Создано</span>
+                <span>📅 ${escapeHtml(m.created_at)}</span>
+            </div>
+            <div class="task-info-item">
+                <span class="task-info-label">Статус</span>
+                <span class="task-status status-${m.status}">${TASK_STATUS_LABELS[m.status] || m.status}</span>
+            </div>
+        </div>`;
+    document.getElementById('statusSelect').value = m.status;
+    document.getElementById('messageModal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('messageModal').style.display = 'none';
+    currentMessageId = null;
+}
+
+async function updateStatusFromModal() {
+    if (!currentMessageId) return;
+    const newStatus = document.getElementById('statusSelect').value;
+    try {
+        const res = await fetch(`/api/update_status/${currentMessageId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({status: newStatus})
+        });
+        if(res.ok) {
+            showNotification('✅ Статус обновлён');
+            loadTasks();
+        } else {
+            showNotification('❌ Ошибка обновления', true);
+        }
+    } catch(e) {
+        showNotification('❌ Ошибка сети', true);
+    }
+}
+
+function openImageModal(src) {
+    document.getElementById('fullImage').src = src;
+    document.getElementById('imageModal').style.display = 'flex';
+}
+
+function closeImageModal() {
+    document.getElementById('imageModal').style.display = 'none';
+}
+
+window.onclick = function(e) {
+    if(e.target.id === 'messageModal') closeModal();
+    if(e.target.id === 'imageModal') closeImageModal();
+}
+
+initFromUrl();
+</script>
+
+{% endblock %}

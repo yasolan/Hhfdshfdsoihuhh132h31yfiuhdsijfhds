@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+myenv/
+venv/
+.env
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Runtime data (лучше не тащить в репо)
+logs.json
+
+# Загрузки пользователей (опционально — раскомментируй, если не нужны в git)
+# static/uploads/*
+# !static/uploads/.gitkeep

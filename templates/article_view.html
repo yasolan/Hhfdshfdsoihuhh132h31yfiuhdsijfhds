@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ article.title }} — База знаний NOC</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='wiki.css') }}">
+</head>
+<body class="wiki-page">
+    <nav class="wiki-page-nav">
+        <div class="inner">
+            <a href="/?tab=wiki" class="wiki-page-brand">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="NOC">
+                <span>База знаний NOC</span>
+            </a>
+            <div class="wiki-page-actions">
+                <a href="/?tab=wiki&category={{ category.id }}" class="btn-wiki">← К категории</a>
+                <button class="btn-wiki btn-wiki-primary" onclick="copyText()">📋 Копировать</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="wiki-page-container">
+        <nav class="wiki-breadcrumb">
+            <a href="/?tab=wiki">Главная</a>
+            <span class="sep">›</span>
+            <a href="/?tab=wiki&category={{ category.id }}">{{ category.name }}</a>
+            <span class="sep">›</span>
+            <span class="current">{{ article.title }}</span>
+        </nav>
+
+        <div class="wiki-page-layout">
+            <aside class="wiki-sidebar">
+                <div class="wiki-sidebar-box">
+                    <div class="wiki-sidebar-title">Категория</div>
+                    <div style="padding:12px 14px; font-size:14px; font-weight:600; color:var(--primary-green);">
+                        {{ category.name }}
+                    </div>
+                </div>
+
+                {% if category.articles|length > 1 %}
+                <div class="wiki-sidebar-box">
+                    <div class="wiki-sidebar-title">Статьи в разделе</div>
+                    <ul class="wiki-sidebar-list">
+                        {% for art in category.articles %}
+                        <li>
+                            {% if art.id == article.id %}
+                            <a href="#" class="active">{{ art.title }}</a>
+                            {% else %}
+                            <a href="/?tab=wiki&category={{ category.id }}&article={{ art.id }}">{{ art.title }}</a>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </aside>
+
+            <main>
+                <div class="wiki-infobox">
+                    <div class="wiki-infobox-head">
+                        <div class="wiki-infobox-cat">📁 {{ category.name }}</div>
+                        <h1>{{ article.title }}</h1>
+                    </div>
+                    <div class="wiki-infobox-meta">
+                        {% if article.images and article.images|length > 0 %}
+                        <span>🖼 {{ article.images|length }} изображений</span>
+                        {% endif %}
+                        {% if article.files and article.files|length > 0 %}
+                        <span>📎 {{ article.files|length }} файлов</span>
+                        {% endif %}
+                        <span>📄 Внутренняя документация NOC</span>
+                    </div>
+                </div>
+
+                <article class="wiki-main-article">
+                    <div class="wiki-content" id="article-content">{{ article.content | format_article }}</div>
+
+                    {% if article.images and article.images|length > 0 %}
+                    <section class="wiki-gallery-section" id="article-gallery">
+                        <h3>Изображения</h3>
+                        <div class="wiki-gallery">
+                            {% for img in article.images %}
+                            <img src="{{ url_for('static', filename=img) }}"
+                                 alt="Изображение {{ loop.index }}"
+                                 onclick="openImage('{{ url_for('static', filename=img) }}')">
+                            {% endfor %}
+                        </div>
+                    </section>
+                    {% endif %}
+
+                    {% if article.files and article.files|length > 0 %}
+                    <section class="wiki-files-section" id="article-files">
+                        <h3>Прикреплённые файлы</h3>
+                        <div class="wiki-file-list">
+                            {% for f in article.files %}
+                            <div class="wiki-file-item">
+                                <span>📄</span>
+                                <span class="fname">{{ f.split('/')[-1] }}</span>
+                                <a href="{{ url_for('static', filename=f) }}" download>Скачать</a>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                    {% endif %}
+
+                    <div class="wiki-article-footer">
+                        <div class="wiki-meta-row"><strong>Последнее изменение:</strong> {{ article.updated_at }} · IP: {{ article.updated_ip }}</div>
+                        {% if article.created_at != article.updated_at %}
+                        <div class="wiki-meta-row"><strong>Создано:</strong> {{ article.created_at }} · IP: {{ article.created_ip }}</div>
+                        {% endif %}
+                    </div>
+                </article>
+            </main>
+        </div>
+    </div>
+
+    <div id="imageModal" class="modal" style="display:none; background:rgba(0,0,0,0.9);" onclick="closeImage()">
+        <span class="modal-close" style="position:absolute; top:20px; right:40px; font-size:40px; color:white; cursor:pointer;">&times;</span>
+        <img id="modalImage" style="max-width:90%; max-height:90%; border-radius:4px;">
+    </div>
+
+    <div id="notif" class="notification" style="display:none;">✅ Скопировано!</div>
+
+    <script>
+    function copyText() {
+        const text = document.getElementById('article-content').innerText;
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(() => showNotif());
+        } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showNotif();
+        }
+    }
+    function showNotif() {
+        const n = document.getElementById('notif');
+        n.style.display = 'block';
+        setTimeout(() => n.style.display = 'none', 3000);
+    }
+    function openImage(src) {
+        document.getElementById('modalImage').src = src;
+        document.getElementById('imageModal').style.display = 'flex';
+    }
+    function closeImage() {
+        document.getElementById('imageModal').style.display = 'none';
+    }
+    </script>
+</body>
+</html>

@@ -1,0 +1,607 @@
+{% extends "base.html" %}
+
+{% block title %}Админ-панель{% endblock %}
+{% block nav_brand %}Админ-панель{% endblock %}
+
+{% block content %}
+<div class="admin-portal">
+    <div class="admin-hero">
+        <h1>⚙️ Панель управления</h1>
+        <p>Категории, статьи и задачи базы знаний NOC</p>
+    </div>
+
+    <div class="admin-tabs">
+        <button class="admin-tab-btn active" data-tab="categories" onclick="showAdminTab('categories', this)">Категории</button>
+        <button class="admin-tab-btn" data-tab="add-category" onclick="showAdminTab('add-category', this)">Добавить категорию</button>
+        <button class="admin-tab-btn" data-tab="add-article" onclick="showAdminTab('add-article', this)">Добавить статью</button>
+        <button class="admin-tab-btn" data-tab="tasks" onclick="showAdminTab('tasks', this)">Задачи</button>
+    </div>
+
+    <!-- Список категорий -->
+    <div id="categories" class="admin-tab-content active">
+        <div id="categoriesListView">
+            <h3 class="wiki-section-title">Управление категориями</h3>
+            <div class="admin-cat-grid" id="adminCatGrid">
+                {% for category in categories %}
+                <div class="admin-cat-card" data-id="{{ category.id }}">
+                    <div class="admin-cat-head">
+                        <h4>{{ category.name }}</h4>
+                        <span class="wiki-tag wiki-tag-green">{{ category.articles|length }} статей</span>
+                    </div>
+                    <p>{{ category.description }}</p>
+                    <div class="admin-cat-actions">
+                        <button class="btn btn-primary btn-small" onclick="openCategoryDetail('{{ category.id }}')">Открыть</button>
+                        <button class="btn btn-secondary btn-small" onclick="quickEditCategory('{{ category.id }}')">Изменить</button>
+                        <button class="btn btn-danger btn-small" onclick="confirmDeleteCategory('{{ category.id }}')">Удалить</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div id="categoryDetailView" style="display:none;">
+            <button class="btn btn-secondary btn-small" onclick="backToCategoriesList()">← К категориям</button>
+            <div class="admin-detail-hero">
+                <h3 id="detailCatName"></h3>
+                <p id="detailCatDesc"></p>
+            </div>
+            <div class="admin-edit-box">
+                <h4>Редактирование категории</h4>
+                <form id="editCategoryForm" onsubmit="handleUpdateCategory(event)">
+                    <input type="hidden" id="editCatId">
+                    <input type="text" id="editCatName" placeholder="Название" required>
+                    <textarea id="editCatDesc" placeholder="Описание" rows="2" required></textarea>
+                    <button type="submit" class="btn btn-primary">Сохранить категорию</button>
+                </form>
+            </div>
+            <h4 class="wiki-section-title">Статьи в категории</h4>
+            <div id="adminArticlesList" class="admin-article-table"></div>
+        </div>
+    </div>
+
+    <!-- Добавить категорию -->
+    <div id="add-category" class="admin-tab-content">
+        <div class="admin-form-card">
+            <h3>➕ Новая категория</h3>
+            <p class="admin-form-hint">Создайте раздел базы знаний для группировки статей.</p>
+            <form id="addCategoryForm" onsubmit="handleAddCategory(event)">
+                <label class="admin-label">Название</label>
+                <input type="text" name="name" placeholder="Например: Блокировки" required>
+                <label class="admin-label">Описание</label>
+                <textarea name="description" placeholder="Краткое описание раздела" rows="3" required></textarea>
+                <button type="submit" class="btn btn-primary">Создать категорию</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Добавить статью -->
+    <div id="add-article" class="admin-tab-content">
+        <div class="admin-form-card">
+            <h3>📝 Новая статья</h3>
+            <form id="addArticleForm" onsubmit="handleAddArticle(event)" enctype="multipart/form-data">
+                <label class="admin-label">Категория</label>
+                <select name="category_id" id="addArticleCategory" required>
+                    <option value="">Выберите категорию</option>
+                    {% for category in categories %}
+                    <option value="{{ category.id }}">{{ category.name }}</option>
+                    {% endfor %}
+                </select>
+                <label class="admin-label">Заголовок</label>
+                <input type="text" name="title" placeholder="Заголовок статьи" required class="admin-title-input">
+                <label class="admin-label">Содержание</label>
+                <div class="editor-toolbar">
+                    <button type="button" onclick="wrapText('articleContent','**','**')" title="Жирный"><b>B</b></button>
+                    <button type="button" onclick="wrapText('articleContent','*','*')" title="Курсив"><i>I</i></button>
+                    <button type="button" onclick="wrapText('articleContent','++','++')" title="Подчёркивание"><u>U</u></button>
+                    <button type="button" onclick="wrapCodeBlock('articleContent')" title="Блок кода">{ }</button>
+                    <button type="button" onclick="openTableBuilder('articleContent')" title="Таблица">⊞</button>
+                </div>
+                <textarea name="content" id="articleContent" placeholder="**жирный** · *курсив* · ++подчёркивание++ · ```блок кода``` · таблица через кнопку ⊞" rows="14" required></textarea>
+
+                <div class="file-upload-section">
+                    <label class="upload-label">
+                        <div class="upload-icon">🖼️</div>
+                        <div class="upload-text"><strong>Изображения</strong><span>PNG, JPG, GIF — несколько файлов</span></div>
+                        <input type="file" name="images" multiple accept="image/*" onchange="previewImages(this)">
+                    </label>
+                    <div id="imagesPreview" class="images-preview" style="display:none;"></div>
+                </div>
+                <div class="file-upload-section">
+                    <label class="upload-label multiple">
+                        <div class="upload-icon">📎</div>
+                        <div class="upload-text"><strong>Файлы</strong><span>PDF, DOCX, XLSX, TXT и др.</span></div>
+                        <input type="file" name="files" multiple accept=".pdf,.docx,.xlsx,.pptx,.txt,.zip,.rar" onchange="showSelectedFiles(this)">
+                    </label>
+                    <div id="filesList" class="files-list"></div>
+                </div>
+                <button type="submit" class="btn btn-primary admin-submit-btn">💾 Опубликовать статью</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Задачи -->
+    <div id="tasks" class="admin-tab-content">
+        <div class="admin-form-card">
+            <h3>📋 Новая задача</h3>
+            <form id="addTaskForm" onsubmit="handleAddTask(event)">
+                <label class="admin-label">Заголовок</label>
+                <input type="text" id="taskTitle" placeholder="Краткое название задачи" required>
+                <label class="admin-label">Описание</label>
+                <textarea id="taskContent" placeholder="Подробности задачи" rows="3" required></textarea>
+                <label class="admin-label">Назначено на...</label>
+                <input type="text" id="taskAssigned" placeholder="ФИО или команда" required>
+                <label class="admin-label">Приоритет</label>
+                <select id="taskPriority">
+                    <option value="low">Низкий</option>
+                    <option value="medium" selected>Средний</option>
+                    <option value="high">Высокий</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Добавить задачу</button>
+            </form>
+        </div>
+        <h3 class="wiki-section-title">Активные задачи</h3>
+        <div class="admin-task-table" id="adminTaskList">
+            {% for message in messages %}
+            <div class="admin-task-row priority-{{ message.priority }}">
+                <div>
+                    <h4>{{ message.title }}</h4>
+                    <p>{{ message.content[:120] }}{% if message.content|length > 120 %}…{% endif %}</p>
+                    <div class="admin-task-meta">
+                        <span>👤 {{ message.assigned_to }}</span>
+                        <span class="task-priority priority-{{ message.priority }}">{{ message.priority }}</span>
+                        <span class="task-status status-{{ message.status }}">{{ message.status }}</span>
+                        <span>📅 {{ message.created_at }}</span>
+                    </div>
+                </div>
+                <button class="btn btn-danger btn-small" onclick="confirmDeleteTask({{ message.id }})">Удалить</button>
+            </div>
+            {% else %}
+            <div class="wiki-empty">Задач пока нет</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Редактирование статьи -->
+<div id="editArticleModal" class="modal admin-modal" style="display:none;">
+    <div class="modal-content admin-modal-content">
+        <div class="admin-modal-head">
+            <h3>✏️ Редактирование статьи</h3>
+            <button class="modal-close" onclick="closeEditArticle()">&times;</button>
+        </div>
+        <form id="editArticleForm" onsubmit="handleUpdateArticle(event)" enctype="multipart/form-data" class="admin-modal-body">
+            <input type="hidden" id="editArticleId">
+            <label class="admin-label">Заголовок</label>
+            <input type="text" id="editArticleTitle" required>
+            <label class="admin-label">Содержание</label>
+            <div class="editor-toolbar">
+                <button type="button" onclick="wrapText('editArticleContent','**','**')" title="Жирный"><b>B</b></button>
+                <button type="button" onclick="wrapText('editArticleContent','*','*')" title="Курсив"><i>I</i></button>
+                <button type="button" onclick="wrapText('editArticleContent','++','++')" title="Подчёркивание"><u>U</u></button>
+                <button type="button" onclick="wrapCodeBlock('editArticleContent')" title="Блок кода">{ }</button>
+                <button type="button" onclick="openTableBuilder('editArticleContent')" title="Таблица">⊞</button>
+            </div>
+            <textarea id="editArticleContent" rows="12" required></textarea>
+            <label class="admin-label">Текущие изображения</label>
+            <div id="editImagesList" class="admin-media-list"></div>
+            <label class="admin-label">Добавить изображения</label>
+            <input type="file" name="images" multiple accept="image/*">
+            <label class="admin-label">Текущие файлы</label>
+            <div id="editFilesList" class="admin-media-list"></div>
+            <label class="admin-label">Добавить файлы</label>
+            <input type="file" name="files" multiple accept=".pdf,.docx,.xlsx,.pptx,.txt,.zip,.rar">
+            <div class="admin-modal-footer">
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteCurrentArticle()">Удалить статью</button>
+                <button type="button" class="btn btn-secondary" onclick="closeEditArticle()">Отмена</button>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Конструктор таблицы -->
+<div id="tableBuilderModal" class="modal admin-modal" style="display:none;">
+    <div class="modal-content admin-modal-content table-builder-modal">
+        <div class="admin-modal-head">
+            <h3>⊞ Конструктор таблицы</h3>
+            <button type="button" class="modal-close" onclick="closeTableBuilder()">&times;</button>
+        </div>
+        <div class="table-builder-body">
+            <p class="table-builder-hint">Выберите размер, заполните ячейки и вставьте таблицу в статью.</p>
+            <div class="table-builder-controls">
+                <div class="table-builder-select">
+                    <label class="admin-label">Столбцов</label>
+                    <select id="tableCols" onchange="renderTableBuilderGrid()">
+                        <option value="2">2</option>
+                        <option value="3" selected>3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                    </select>
+                </div>
+                <div class="table-builder-select">
+                    <label class="admin-label">Строк</label>
+                    <select id="tableRows" onchange="renderTableBuilderGrid()">
+                        <option value="2">2</option>
+                        <option value="3" selected>3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                    </select>
+                </div>
+            </div>
+            <p class="table-builder-note">Первая строка — заголовки столбцов, остальные — данные.</p>
+            <div id="tableBuilderGrid" class="table-builder-grid-wrap"></div>
+            <div class="table-builder-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeTableBuilder()">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="insertTableFromBuilder()">Вставить таблицу</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Подтверждение -->
+<div id="confirmModal" class="modal confirm-modal" style="display:none;">
+    <div class="modal-content confirm-modal-content">
+        <div class="confirm-modal-head">
+            <h3 id="confirmTitle">Подтверждение</h3>
+        </div>
+        <p id="confirmMessage" class="confirm-modal-text"></p>
+        <div class="confirm-modal-actions">
+            <button class="btn btn-secondary" onclick="closeConfirm()">Отмена</button>
+            <button class="btn btn-primary" id="confirmOkBtn">Подтвердить</button>
+        </div>
+    </div>
+</div>
+
+<!-- Уведомление -->
+<div id="adminNotifyModal" class="modal confirm-modal" style="display:none;">
+    <div class="modal-content confirm-modal-content">
+        <div class="confirm-modal-head success">
+            <h3 id="notifyTitle">Готово</h3>
+        </div>
+        <p id="notifyMessage" class="confirm-modal-text"></p>
+        <div class="confirm-modal-actions">
+            <button class="btn btn-primary" onclick="closeNotify(true)">ОК</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const ADMIN_CATEGORIES = {{ categories|tojson }};
+let currentDetailCategory = null;
+let editRemoveImages = [];
+let editRemoveFiles = [];
+let confirmCallback = null;
+let notifyReload = false;
+let tableBuilderTarget = null;
+let tableBuilderCache = {};
+
+function showAdminTab(tabId, btn) {
+    document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    btn.classList.add('active');
+}
+
+function showConfirm(title, message, onConfirm) {
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMessage').textContent = message;
+    confirmCallback = onConfirm;
+    document.getElementById('confirmModal').style.display = 'flex';
+    document.getElementById('confirmOkBtn').onclick = () => {
+        closeConfirm();
+        if (confirmCallback) confirmCallback();
+    };
+}
+
+function closeConfirm() {
+    document.getElementById('confirmModal').style.display = 'none';
+    confirmCallback = null;
+}
+
+function showNotify(title, message, reload = false) {
+    document.getElementById('notifyTitle').textContent = title;
+    document.getElementById('notifyMessage').textContent = message;
+    notifyReload = reload;
+    document.getElementById('adminNotifyModal').style.display = 'flex';
+}
+
+function closeNotify(doReload) {
+    document.getElementById('adminNotifyModal').style.display = 'none';
+    if (doReload && notifyReload) location.reload();
+    notifyReload = false;
+}
+
+function wrapText(id, before, after) {
+    const ta = document.getElementById(id);
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const val = ta.value;
+    const selected = val.slice(s, e) || 'текст';
+    ta.value = val.slice(0, s) + before + selected + after + val.slice(e);
+    ta.focus();
+    ta.selectionStart = s + before.length;
+    ta.selectionEnd = s + before.length + selected.length;
+}
+
+function wrapCodeBlock(id) {
+    const ta = document.getElementById(id);
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const selected = ta.value.slice(s, e) || 'код';
+    const block = '```\n' + selected + '\n```';
+    ta.value = ta.value.slice(0, s) + block + ta.value.slice(e);
+    ta.focus();
+}
+
+function openTableBuilder(textareaId) {
+    tableBuilderTarget = textareaId;
+    tableBuilderCache = {};
+    document.getElementById('tableCols').value = '3';
+    document.getElementById('tableRows').value = '3';
+    renderTableBuilderGrid();
+    document.getElementById('tableBuilderModal').style.display = 'flex';
+}
+
+function closeTableBuilder() {
+    document.getElementById('tableBuilderModal').style.display = 'none';
+    tableBuilderTarget = null;
+}
+
+function saveTableBuilderInputs() {
+    document.querySelectorAll('#tableBuilderGrid input').forEach(inp => {
+        tableBuilderCache[`${inp.dataset.r}-${inp.dataset.c}`] = inp.value;
+    });
+}
+
+function renderTableBuilderGrid() {
+    saveTableBuilderInputs();
+    const cols = parseInt(document.getElementById('tableCols').value, 10);
+    const rows = parseInt(document.getElementById('tableRows').value, 10);
+    const wrap = document.getElementById('tableBuilderGrid');
+
+    let html = '<table class="table-builder-grid"><tbody>';
+    for (let r = 0; r < rows; r++) {
+        html += '<tr>';
+        html += `<td class="table-builder-row-label">${r === 0 ? 'Шапка' : r + ' строка'}</td>`;
+        for (let c = 0; c < cols; c++) {
+            const key = `${r}-${c}`;
+            const cached = tableBuilderCache[key];
+            const defaultVal = cached !== undefined ? cached : (r === 0 ? `Заголовок ${c + 1}` : '');
+            const placeholder = r === 0 ? 'Заголовок' : 'Значение';
+            html += `<td><input type="text" data-r="${r}" data-c="${c}" value="${escAttr(defaultVal)}" placeholder="${placeholder}"></td>`;
+        }
+        html += '</tr>';
+    }
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+}
+
+function escAttr(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+function insertTableFromBuilder() {
+    if (!tableBuilderTarget) return;
+    saveTableBuilderInputs();
+    const cols = parseInt(document.getElementById('tableCols').value, 10);
+    const rows = parseInt(document.getElementById('tableRows').value, 10);
+    const get = (r, c) => (tableBuilderCache[`${r}-${c}`] || '').trim();
+
+    const header = [];
+    for (let c = 0; c < cols; c++) {
+        header.push(get(0, c) || `Столбец ${c + 1}`);
+    }
+
+    const sepCells = header.map(() => '---');
+    let md = '\n| ' + header.join(' | ') + ' |\n| ' + sepCells.join(' | ') + ' |\n';
+    for (let r = 1; r < rows; r++) {
+        const row = [];
+        for (let c = 0; c < cols; c++) row.push(get(r, c));
+        md += '| ' + row.join(' | ') + ' |\n';
+    }
+
+    const ta = document.getElementById(tableBuilderTarget);
+    const pos = ta.selectionStart;
+    ta.value = ta.value.slice(0, pos) + md + ta.value.slice(pos);
+    closeTableBuilder();
+    ta.focus();
+}
+
+function previewImages(input) {
+    const preview = document.getElementById('imagesPreview');
+    preview.innerHTML = '';
+    if (input.files?.length) {
+        [...input.files].forEach(file => {
+            const reader = new FileReader();
+            reader.onload = e => { preview.innerHTML += `<img src="${e.target.result}" alt="">`; };
+            reader.readAsDataURL(file);
+        });
+        preview.style.display = 'flex';
+    } else preview.style.display = 'none';
+}
+
+function showSelectedFiles(input) {
+    const list = document.getElementById('filesList');
+    if (!input.files?.length) { list.innerHTML = ''; return; }
+    list.innerHTML = [...input.files].map(f =>
+        `<div class="file-item"><span>📄</span><span class="file-name">${f.name}</span><span class="file-size">${(f.size/1024).toFixed(1)} KB</span></div>`
+    ).join('');
+}
+
+function openCategoryDetail(catId) {
+    const cat = ADMIN_CATEGORIES.find(c => c.id === catId);
+    if (!cat) return;
+    currentDetailCategory = cat;
+    document.getElementById('categoriesListView').style.display = 'none';
+    document.getElementById('categoryDetailView').style.display = 'block';
+    document.getElementById('detailCatName').textContent = cat.name;
+    document.getElementById('detailCatDesc').textContent = cat.description;
+    document.getElementById('editCatId').value = cat.id;
+    document.getElementById('editCatName').value = cat.name;
+    document.getElementById('editCatDesc').value = cat.description;
+    renderAdminArticles(cat.articles || []);
+}
+
+function quickEditCategory(catId) {
+    openCategoryDetail(catId);
+    document.getElementById('editCatName').focus();
+}
+
+function backToCategoriesList() {
+    currentDetailCategory = null;
+    document.getElementById('categoryDetailView').style.display = 'none';
+    document.getElementById('categoriesListView').style.display = 'block';
+}
+
+function renderAdminArticles(articles) {
+    const list = document.getElementById('adminArticlesList');
+    if (!articles.length) {
+        list.innerHTML = '<div class="wiki-empty">Статей в категории нет</div>';
+        return;
+    }
+    list.innerHTML = articles.map(a => `
+        <div class="admin-article-row">
+            <div>
+                <h4>${a.title}</h4>
+                <p>${(a.content || '').substring(0, 100)}${(a.content||'').length > 100 ? '…' : ''}</p>
+            </div>
+            <div class="admin-cat-actions">
+                <button class="btn btn-primary btn-small edit-article-btn" data-article-id="${a.id}">Редактировать</button>
+            </div>
+        </div>
+    `).join('');
+    list.querySelectorAll('[data-article-id]').forEach(btn => {
+        btn.addEventListener('click', () => openEditArticle(btn.dataset.articleId));
+    });
+}
+
+function openEditArticle(articleId) {
+    const article = (currentDetailCategory?.articles || []).find(a => a.id === articleId);
+    if (!article) return;
+    editRemoveImages = [];
+    editRemoveFiles = [];
+    document.getElementById('editArticleId').value = article.id;
+    document.getElementById('editArticleTitle').value = article.title;
+    document.getElementById('editArticleContent').value = article.content;
+    const imgs = article.images || [];
+    const files = article.files || [];
+    document.getElementById('editImagesList').innerHTML = imgs.length ? imgs.map(img => `
+        <div class="admin-media-item" data-path="${img}">
+            <img src="/static/${img}" alt="">
+            <span>${img.split('/').pop()}</span>
+            <button type="button" class="btn btn-danger btn-small" onclick="markRemoveImage('${img}', this)">✕</button>
+        </div>
+    `).join('') : '<span class="text-muted">Нет изображений</span>';
+    document.getElementById('editFilesList').innerHTML = files.length ? files.map(f => `
+        <div class="admin-media-item" data-path="${f}">
+            <span>📄 ${f.split('/').pop()}</span>
+            <button type="button" class="btn btn-danger btn-small" onclick="markRemoveFile('${f}', this)">✕</button>
+        </div>
+    `).join('') : '<span class="text-muted">Нет файлов</span>';
+    document.getElementById('editArticleModal').style.display = 'flex';
+}
+
+function markRemoveImage(path, btn) {
+    editRemoveImages.push(path);
+    btn.closest('.admin-media-item').remove();
+}
+
+function markRemoveFile(path, btn) {
+    editRemoveFiles.push(path);
+    btn.closest('.admin-media-item').remove();
+}
+
+function closeEditArticle() {
+    document.getElementById('editArticleModal').style.display = 'none';
+}
+
+async function handleAddCategory(e) {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.target));
+    const res = await fetch('/api/add_category', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    if (res.ok) showNotify('Категория создана', 'Новый раздел добавлен в базу знаний.', true);
+    else showNotify('Ошибка', 'Не удалось создать категорию.');
+}
+
+async function handleUpdateCategory(e) {
+    e.preventDefault();
+    const id = document.getElementById('editCatId').value;
+    const data = { name: document.getElementById('editCatName').value, description: document.getElementById('editCatDesc').value };
+    const res = await fetch(`/api/update_category/${id}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    if (res.ok) showNotify('Сохранено', 'Категория обновлена.', true);
+    else showNotify('Ошибка', 'Не удалось обновить категорию.');
+}
+
+async function handleAddArticle(e) {
+    e.preventDefault();
+    const res = await fetch('/api/add_article', { method: 'POST', body: new FormData(e.target) });
+    if (res.ok) {
+        showNotify('Статья опубликована', 'Материал добавлен в базу знаний.');
+        e.target.reset();
+        document.getElementById('imagesPreview').style.display = 'none';
+        document.getElementById('filesList').innerHTML = '';
+    } else showNotify('Ошибка', 'Не удалось сохранить статью.');
+}
+
+async function handleUpdateArticle(e) {
+    e.preventDefault();
+    const id = document.getElementById('editArticleId').value;
+    const fd = new FormData(e.target);
+    fd.set('title', document.getElementById('editArticleTitle').value);
+    fd.set('content', document.getElementById('editArticleContent').value);
+    if (editRemoveImages.length) fd.set('remove_images', editRemoveImages.join(','));
+    if (editRemoveFiles.length) fd.set('remove_files', editRemoveFiles.join(','));
+    const res = await fetch(`/api/update_article/${id}`, { method: 'POST', body: fd });
+    if (res.ok) {
+        closeEditArticle();
+        showNotify('Сохранено', 'Статья обновлена.', true);
+    } else showNotify('Ошибка', 'Не удалось обновить статью.');
+}
+
+async function handleAddTask(e) {
+    e.preventDefault();
+    const data = {
+        title: document.getElementById('taskTitle').value,
+        content: document.getElementById('taskContent').value,
+        assigned_to: document.getElementById('taskAssigned').value,
+        priority: document.getElementById('taskPriority').value
+    };
+    const res = await fetch('/api/add_message', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    if (res.ok) showNotify('Задача добавлена', 'Новая задача создана.', true);
+    else showNotify('Ошибка', 'Не удалось создать задачу.');
+}
+
+function confirmDeleteCategory(id) {
+    const cat = ADMIN_CATEGORIES.find(c => c.id === id);
+    const name = cat ? cat.name : 'категория';
+    showConfirm('Удалить категорию?', `Категория «${name}» и все её статьи будут удалены безвозвратно.`, async () => {
+        const res = await fetch(`/api/delete_category/${id}`, { method: 'POST' });
+        if (res.ok) showNotify('Удалено', 'Категория удалена.', true);
+        else showNotify('Ошибка', 'Не удалось удалить категорию.');
+    });
+}
+
+function confirmDeleteTask(id) {
+    showConfirm('Удалить задачу?', 'Задача будет удалена безвозвратно.', async () => {
+        const res = await fetch(`/api/delete_message/${id}`, { method: 'POST' });
+        if (res.ok) showNotify('Удалено', 'Задача удалена.', true);
+        else showNotify('Ошибка', 'Не удалось удалить задачу.');
+    });
+}
+
+function confirmDeleteCurrentArticle() {
+    const id = document.getElementById('editArticleId').value;
+    showConfirm('Удалить статью?', 'Статья будет удалена безвозвратно.', async () => {
+        const res = await fetch(`/api/delete_article/${id}`, { method: 'POST' });
+        if (res.ok) { closeEditArticle(); showNotify('Удалено', 'Статья удалена.', true); }
+        else showNotify('Ошибка', 'Не удалось удалить статью.');
+    });
+}
+</script>
+{% endblock %}

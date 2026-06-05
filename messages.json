@@ -1,0 +1,40 @@
+{
+  "messages": [
+    {
+      "id": 1,
+      "title": "Тестовая задача 1",
+      "content": "Тестовая задача 1",
+      "assigned_to": "Иванов",
+      "priority": "medium",
+      "status": "in_progress",
+      "created_at": "27.05.2026 20:41"
+    },
+    {
+      "id": 2,
+      "title": "Тестовая задача 2",
+      "content": "Тестовая задача 2",
+      "assigned_to": "Масловский",
+      "priority": "high",
+      "status": "done",
+      "created_at": "05.06.2026 18:54"
+    },
+    {
+      "id": 3,
+      "title": "Тестовая задача 3",
+      "content": "Тестовая задача 3",
+      "assigned_to": "Масловский",
+      "priority": "low",
+      "status": "pending",
+      "created_at": "05.06.2026 18:55"
+    },
+    {
+      "id": 4,
+      "title": "Тестовая задача 22",
+      "content": "Тестовая задача 22",
+      "assigned_to": "Суслов",
+      "priority": "high",
+      "status": "in_progress",
+      "created_at": "05.06.2026 19:09"
+    }
+  ]
+}
